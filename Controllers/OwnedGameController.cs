@@ -1,10 +1,6 @@
 ﻿using FullStackBrist.Server.Models.Profile;
-using FullStackBrist.Server.Models.Requirements;
 using Microsoft.AspNetCore.Mvc;
-using Slush.DAO.ProfileDao;
-using Slush.DAO.RequirementsDao;
-using Slush.Data;
-using Slush.Data.Entity;
+using Slush.Repositories.ProfileRepository;
 using Slush.Entity.Profile;
 
 namespace FullStackBrist.Server.Controllers
@@ -13,25 +9,19 @@ namespace FullStackBrist.Server.Controllers
     [Route("api/[controller]")]
     public class OwnedGameController : Controller
     {
-        private readonly DataContext _dataContext;
-        private readonly OwnedGameDao _ownedGameDao;
+        private readonly OwnedGameRepository _ownedGameRepositories;
 
-        public OwnedGameController(DataContext dataContext, OwnedGameDao ownedGameDao)
+        public OwnedGameController(OwnedGameRepository ownedGameRepositories)
         {
-            _dataContext = dataContext;
-            _ownedGameDao = ownedGameDao;
+            _ownedGameRepositories = ownedGameRepositories;
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<OwnedGameDao>>> GetAllOwnedGames()
+        public async Task<ActionResult<List<OwnedGameRepository>>> GetAllOwnedGames()
         {
-            var _ownedGames = await _ownedGameDao.GetAllOwnedGames();
+            var _ownedGames = await _ownedGameRepositories.GetAllOwnedGames();
 
-            var response = _ownedGames.Select(o => new OwnedGame(id: o.id,
-                                                                 ownedGameId: o.ownedGameId,
-                                                                 userId: o.userId,
-                                                                 createdAt: o.createdAt)).ToList();
-            return Ok(response);
+            return Ok(_ownedGames);
         }
 
 
@@ -43,15 +33,39 @@ namespace FullStackBrist.Server.Controllers
                 model.userId,
                                             DateTime.Now
                                             );
-            var response = await _dataContext.dbOwnedGames.AddAsync(result);
-            return Ok(response);
-
+            await _ownedGameRepositories.Add(result);
+            return Ok(result);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<OwnedGame>> GetOwnedGame(Guid id)
         {
-            var response = await _ownedGameDao.GetById(id);
+            var response = await _ownedGameRepositories.GetById(id);
+            if (response == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(response);
+        }
+
+        [HttpGet("byuserid/{id}")]
+        public async Task<ActionResult<List<OwnedGame>>> GetByUserId(Guid id)
+        {
+            var response = await _ownedGameRepositories.GetByUId(id);
+
+            if(response == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(response);
+        }
+
+        [HttpGet("bygameid/{id}/byuserid/{uid}")]
+        public async Task<ActionResult<List<OwnedGame>>> GetUsersByOwnedGame(Guid id, Guid uid)
+        {
+            var response = await _ownedGameRepositories.GetByGameId(id, uid);
             if (response == null)
             {
                 return NotFound();
@@ -63,16 +77,23 @@ namespace FullStackBrist.Server.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteOwnedGame(Guid id)
         {
-            await _ownedGameDao.DeleteOwnedGame(id);
+            await _ownedGameRepositories.DeleteOwnedGame(id);
             return NoContent();
         }
 
         [HttpPut("{id}")]
-        public async Task<ActionResult> UpdateMinimalSystemRequirement(Guid id, [FromBody] OwnedGameModel game)
+        public async Task<ActionResult> UpdateOwnedGame(Guid id, [FromBody] OwnedGameModel game)
         {
-            var result = new OwnedGame(id, game.ownedGameId, game.userId, game.createdAt);
-            await _ownedGameDao.UpdateOwnedGame(result);
-            return NoContent();
+            var result = await _ownedGameRepositories.UpdateOwnedGame(new OwnedGame(id, game.ownedGameId, game.userId, game.createdAt));
+            return Ok(result);
+        }
+
+        [HttpPost("getall")]
+        public async Task<ActionResult<List<OwnedGame>>> GetAllOwnedGamesByIds([FromBody] List<Guid> guidList)
+        {
+            var response = await _ownedGameRepositories.GetByIds(guidList);
+
+            return Ok(response);
         }
     }
 }

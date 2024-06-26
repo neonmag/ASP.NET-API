@@ -1,11 +1,7 @@
 ﻿using FullStackBrist.Server.Models.Profile;
-using FullStackBrist.Server.Models.ShopContent;
 using Microsoft.AspNetCore.Mvc;
-using Slush.DAO.GameInShopDao;
-using Slush.DAO.ProfileDao;
-using Slush.Data;
+using Slush.Repositories.ProfileRepository;
 using Slush.Entity.Profile;
-using Slush.Entity.Store.Product;
 
 namespace FullStackBrist.Server.Controllers
 {
@@ -13,26 +9,19 @@ namespace FullStackBrist.Server.Controllers
     [Route("api/[controller]")]
     public class FriendsController : Controller
     {
-        private readonly DataContext _dataContext;
-        private readonly FriendsDao _friendsDao;
+        private readonly FriendsRepository _friendsRepositories;
 
-        public FriendsController(DataContext dataContext, FriendsDao friendsDao)
+        public FriendsController(FriendsRepository friendsRepositories)
         {
-            _dataContext = dataContext;
-            _friendsDao = friendsDao;
+            _friendsRepositories = friendsRepositories;
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<FriendsDao>>> GetAllFriends()
+        public async Task<ActionResult<List<FriendsRepository>>> GetAllFriends()
         {
-            var _friends = await _friendsDao.GetAllFriends();
+            var _friends = await _friendsRepositories.GetAllFriends();
 
-            var response = _friends.Select(f => new Friends(id: f.id,
-                                                            userId:       f.userId,
-                                                            friendId:       f.friendId,
-                                                            createdAt:       f.createdAt)).ToList();
-
-            return Ok(response);
+            return Ok(_friends);
         }
 
         [HttpPost]
@@ -43,16 +32,28 @@ namespace FullStackBrist.Server.Controllers
                                             model.friendId,
                                             DateTime.Now
                                             );
-            var response = await _dataContext.dbFriends.AddAsync(result);
+           await _friendsRepositories.Add(result);
 
-            return Ok(response);
+            return Ok(result);
         }
 
 
         [HttpGet("{id}")]
         public async Task<ActionResult<Friends>> GetFriends(Guid id)
         {
-            var response = await _friendsDao.GetById(id);
+            var response = await _friendsRepositories.GetById(id);
+            if (response == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(response);
+        }
+
+        [HttpGet("getbyuserid/{id}")]
+        public async Task<ActionResult<List<Friends>>> GetFriendsByUserId(Guid id)
+        {
+            var response = await _friendsRepositories.GetByUserId(id);
             if (response == null)
             {
                 return NotFound();
@@ -64,16 +65,23 @@ namespace FullStackBrist.Server.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteFriends(Guid id)
         {
-            await _friendsDao.DeleteFriends(id);
+            await _friendsRepositories.DeleteFriends(id);
             return NoContent();
         }
 
         [HttpPut("{id}")]
         public async Task<ActionResult> UpdateFriends(Guid id, [FromBody] FriendsModel model)
         {
-            var result = new Friends(id, model.userId, model.friendId, model.createdAt);
-            await _friendsDao.UpdateFriends(result);
-            return NoContent();
+            var result = await _friendsRepositories.UpdateFriends(new Friends(id, model.userId, model.friendId, model.createdAt));
+            return Ok(result);
+        }
+
+        [HttpPost("getall")]
+        public async Task<ActionResult<List<Friends>>> GetAllFriendsByIds([FromBody] List<Guid> guidList)
+        {
+            var response = await _friendsRepositories.GetByUserIds(guidList);
+
+            return Ok(response);
         }
     }
 }

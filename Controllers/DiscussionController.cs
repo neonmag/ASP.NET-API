@@ -1,41 +1,27 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Org.BouncyCastle.Crypto;
-using Org.BouncyCastle.Crypto.Utilities;
-using Slush.DAO;
-using Slush.Data;
+using Slush.Repositories;
 using Slush.Entity;
 using Slush.Models;
 
 namespace Slush.Controllers
 {
     [ApiController]
-    [Route("api/{controller}")]
+    [Route("api/[controller]")]
     public class DiscussionController : Controller
     {
-        private readonly DataContext _dataContext;
-        private readonly DiscussionDao _discussionDao;
+        private readonly DiscussionRepository _DiscussionRepository;
 
-        public DiscussionController(DataContext dataContext, DiscussionDao discussionDao)
+        public DiscussionController( DiscussionRepository DiscussionRepository)
         {
-            _dataContext = dataContext;
-            _discussionDao = discussionDao;
+            _DiscussionRepository = DiscussionRepository;
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<DiscussionDao>>> GetAllDiscussions()
+        public async Task<ActionResult<List<DiscussionRepository>>> GetAllDiscussions()
         {
-            var _discussions = await _discussionDao.GetAllDiscussions();
+            var _discussions = await _DiscussionRepository.GetAllDiscussions();
 
-            var response = _discussions.Select(d => new Discussion(
-                id: d.id,
-                authorId: d.authorId,
-                attachedId: d.attachedId,
-                content: d.content,
-                likesCount: d.likesCount,
-                createdAt: d.createdAt
-                )).ToList();
-
-            return Ok(response);
+            return Ok(_discussions);
         }
 
         [HttpPost]
@@ -46,9 +32,10 @@ namespace Slush.Controllers
                 model.attachedId,
                 model.content,
                 model.likesCount,
+                model.rate,
                 DateTime.Now);
 
-            var response = _discussionDao.UpdateDiscussion(result);
+            var response = _DiscussionRepository.UpdateDiscussion(result);
 
             return Ok(response);
         }
@@ -56,9 +43,22 @@ namespace Slush.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<Discussion>> GetDiscussion(Guid id)
         {
-            var response = await _discussionDao.GetById(id);
+            var response = await _DiscussionRepository.GetById(id);
 
-            if (response != null)
+            if (response == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(response);
+        }
+
+        [HttpGet("byattachedid/{id}")]
+        public async Task<ActionResult<List<Discussion>>> GetDiscussionByAttachedId(Guid id)
+        {
+            var response = await _DiscussionRepository.GetByAttachedId(id);
+
+            if (response == null)
             {
                 return NotFound();
             }
@@ -69,16 +69,23 @@ namespace Slush.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteDiscussion(Guid id)
         {
-            await _discussionDao.DeleteDiscussion(id);
+            await _DiscussionRepository.DeleteDiscussion(id);
             return NoContent();
         }
 
         [HttpPut("{id}")]
         public async Task<ActionResult> UpdateDiscussion(Guid id, [FromBody] DiscussionModel model)
         {
-            var result = new Discussion(id, model.authordId, model.attachedId, model.content, model.likesCount, model.createdAt);
-            await _discussionDao.UpdateDiscussion(result);
-            return NoContent();
+            var result = await _DiscussionRepository.UpdateDiscussion(new Discussion(id, model.authordId, model.attachedId, model.content, model.likesCount, model.rate, model.createdAt));
+            return Ok(result);
+        }
+
+        [HttpPost("getall")]
+        public async Task<ActionResult<List<Discussion>>> GetAllDiscussionsByIds([FromBody] List<Guid> guidList)
+        {
+            var response = await _DiscussionRepository.GetByIds(guidList);
+
+            return Ok(response);
         }
     }
 }

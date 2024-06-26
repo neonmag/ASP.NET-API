@@ -1,10 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Slush.DAO.CategoriesDao;
+using Slush.Repositories.CategoriesRepository;
 using Slush.Data.Entity;
-using Slush.Data;
-using FullStackBrist.Server.Models.Creators;
-using Slush.Entity.Store.Product.Creators;
 using FullStackBrist.Server.Models.Categories;
+using Slush.Services.Minio;
 
 namespace FullStackBrist.Server.Controllers
 {
@@ -12,48 +10,63 @@ namespace FullStackBrist.Server.Controllers
     [Route("api/[controller]")]
     public class CategoriesByAuthorController : Controller
     {
-        private readonly DataContext _dataContext;
-        private readonly CategoriesByAuthorDao _categoriesByAuthorDao;
+        private readonly CategoriesByAuthorRepository _categoriesByAuthorRepositories;
+        private readonly MinioService _minioService;
 
-        public CategoriesByAuthorController(DataContext dataContext, CategoriesByAuthorDao categoriesByAuthorDao)
+        public CategoriesByAuthorController(CategoriesByAuthorRepository categoriesByAuthorRepositories, MinioService minioService)
         {
-            _dataContext = dataContext;
-            _categoriesByAuthorDao = categoriesByAuthorDao;
+            _categoriesByAuthorRepositories = categoriesByAuthorRepositories;
+            _minioService = minioService;
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<CategoriesByAuthorDao>>> GetAllCategoriesByAuthor()
+        public async Task<ActionResult<List<CategoriesByAuthorRepository>>> GetAllCategoriesByAuthor()
         {
-            var _categoriesByAuthor = await _categoriesByAuthorDao.GetAllCategoriesByAuthor();
+            var _categoriesByAuthor = await _categoriesByAuthorRepositories.GetAllCategoriesByAuthor();
 
-            var response = _categoriesByAuthor.Select(c => new CategoryByAuthor(id: c.id,
-                                                                                authorId: c.authorId,
-                                                                                name: c.name,
-                                                                                description: c.description,
-                                                                                image: c.image,
-                                                                                createdAt: c.createdAt)).ToList();
-
-            return Ok(response);
+            return Ok(_categoriesByAuthor);
         }
 
         [HttpPost]
-        public async Task<ActionResult<CategoryByAuthor>> CreateCategoryByAuthor([FromBody] CategoryByAuthorModel model)
+        public async Task<ActionResult<CategoryByAuthor>> CreateCategoryByAuthor([FromBody] CategoryByAuthorModel model, IFormFile file)
         {
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest("File is empty");
+            }
+
             var result = new CategoryByAuthor(Guid.NewGuid(),
                                         model.authorId,
                                         model.name,
                                         model.description,
                                         model.image,
                                         DateTime.Now);
-            var response = await _dataContext.dbCategoriesByAuthors.AddAsync(result);
 
-            return Ok(response);
+            using (var stream = file.OpenReadStream())
+            {
+                try
+                {
+                    String imageUrl = await _minioService.SaveFile("images", result.id, file.FileName, stream);
+
+                    var url = _minioService.GetUrlToFile(imageUrl);
+
+                    result.image = url.ToString();
+
+                    await _categoriesByAuthorRepositories.Add(result);
+
+                    return Ok(result);
+                }
+                catch (Exception ex)
+                {
+                    return StatusCode(500, $"Failed to upload image: {ex.Message}");
+                }
+            }
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<CategoryByAuthor>> GetCategoryByAuthor(Guid id)
         {
-            var response = await _categoriesByAuthorDao.GetById(id);
+            var response = await _categoriesByAuthorRepositories.GetById(id);
             if (response == null)
             {
                 return NotFound();
@@ -65,16 +78,43 @@ namespace FullStackBrist.Server.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteCategoryByAuthor(Guid id)
         {
-            await _categoriesByAuthorDao.DeleteCategoryByAuthor(id);
+            await _categoriesByAuthorRepositories.DeleteCategoryByAuthor(id);
             return NoContent();
         }
 
         [HttpPut("{id}")]
-        public async Task<ActionResult> UpdateCategoryByAuthor(Guid id, [FromBody] CategoryByAuthorModel model)
+        public async Task<ActionResult> UpdateCategoryByAuthor(Guid id, [FromBody] CategoryByAuthorModel model, IFormFile file)
         {
-            var result = new CategoryByAuthor(id, model.authorId, model.name, model.description, model.image, DateTime.Now);
-            await _categoriesByAuthorDao.UpdateCategoriesByAuthor(result);
-            return NoContent();
+            if (file != null || file.Length != 0)
+            {
+                using (var stream = file.OpenReadStream())
+                {
+                    try
+                    {
+                        String imageUrl = await _minioService.SaveFile("images", id, file.FileName, stream);
+
+                        var url = _minioService.GetUrlToFile(imageUrl);
+
+                        model.image = url.ToString();
+                    }
+                    catch (Exception ex)
+                    {
+                        return StatusCode(500, $"Failed to upload image: {ex.Message}");
+                    }
+                }
+            }
+
+            var result = await _categoriesByAuthorRepositories.UpdateCategoriesByAuthor(new CategoryByAuthor(id, model.authorId, model.name, model.description, model.image, DateTime.Now));
+
+            return Ok(result);
+        }
+
+        [HttpPost("getall")]
+        public async Task<ActionResult<List<CategoryByAuthor>>> GetAllCategoriesByIds([FromBody] List<Guid> guidlist)
+        {
+            var response = await _categoriesByAuthorRepositories.GetAllCategoriesByIds(guidlist);
+
+            return Ok(response);
         }
     }
 }

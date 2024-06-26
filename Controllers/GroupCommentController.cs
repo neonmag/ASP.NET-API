@@ -1,12 +1,7 @@
-﻿using FullStackBrist.Server.Models.GameGroup;
-using FullStackBrist.Server.Models.Group;
+﻿using FullStackBrist.Server.Models.Group;
 using Microsoft.AspNetCore.Mvc;
-using Slush.DAO.GameGroupDao;
-using Slush.DAO.GroupDao;
-using Slush.Data;
+using Slush.Repositories.GroupRepository;
 using Slush.Data.Entity.Community;
-using Slush.Data.Entity.Community.GameGroup;
-using System.Linq;
 
 namespace FullStackBrist.Server.Controllers
 {
@@ -14,26 +9,19 @@ namespace FullStackBrist.Server.Controllers
     [Route("api/[controller]")]
     public class GroupCommentController : Controller
     {       
-        private readonly DataContext _dataContext;
-        private readonly GroupCommentDao _groupCommentDao;
+        private readonly GroupCommentRepository _groupCommentRepositories;
 
-        public GroupCommentController(DataContext dataContext, GroupCommentDao groupCommentDao)
+        public GroupCommentController(GroupCommentRepository groupCommentRepositories)
         {
-            _dataContext = dataContext;
-            _groupCommentDao = groupCommentDao;
+            _groupCommentRepositories = groupCommentRepositories;
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<GroupCommentDao>>> GetAllGroupComments()
+        public async Task<ActionResult<List<GroupComment>>> GetAllGroupComments()
         {
-            var _groupComments = await _groupCommentDao.GetAllGroupComments();
+            var _groupComments = await _groupCommentRepositories.GetAllGroupComments();
 
-            var response = _groupComments.Select(g => new GroupComment(id: g.id,
-                                                                       groupId: g.groupId,
-                                                                       content: g.content,
-                                                                       userId: g.userId,
-                                                                       createdAt: g.createdAt)).ToList();
-            return Ok(response);
+            return Ok(_groupComments);
         }
 
         [HttpPost]
@@ -45,15 +33,15 @@ namespace FullStackBrist.Server.Controllers
                                             model.userId,
                                             DateTime.Now
                                             );
-            var response = await _dataContext.dbGroupComments.AddAsync(result);
+            await _groupCommentRepositories.Add(result);
 
-            return Ok(response);
+            return Ok(result);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<GroupComment>> GetGroupComment(Guid id)
         {
-            var response = await _groupCommentDao.GetById(id);
+            var response = await _groupCommentRepositories.GetById(id);
             if (response == null)
             {
                 return NotFound();
@@ -65,16 +53,23 @@ namespace FullStackBrist.Server.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteGroupComment(Guid id)
         {
-            await _groupCommentDao.DeleteGroupComment(id);
+            await _groupCommentRepositories.DeleteGroupComment(id);
             return NoContent();
         }
 
         [HttpPut("{id}")]
         public async Task<ActionResult> UpdateGroupComment(Guid id, [FromBody] GroupCommentModel group)
         {
-            var result = new GroupComment(id, group.groupId, group.content, group.userId, group.createdAt);
-            await _groupCommentDao.UpdateGroupComment(result);
-            return NoContent();
+            var result = await _groupCommentRepositories.UpdateGroupComment(new GroupComment(id, group.groupId, group.content, group.userId, group.createdAt));
+            return Ok(result);
+        }
+
+        [HttpPost("getall")]
+        public async Task<ActionResult<List<GroupComment>>> GetAllGroupCommentsByIds([FromBody] List<Guid> guidList)
+        {
+            var response = await _groupCommentRepositories.GetByIds(guidList);
+
+            return Ok(response);
         }
     }
 }

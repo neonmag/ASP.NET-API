@@ -1,9 +1,7 @@
 ﻿using FullStackBrist.Server.Models.Requirements;
 using Microsoft.AspNetCore.Mvc;
-using Slush.DAO.RequirementsDao;
-using Slush.Data;
+using Slush.Repositories.RequirementsRepository;
 using Slush.Data.Entity;
-using Slush.Data.Entity.Profile;
 
 namespace FullStackBrist.Server.Controllers
 {
@@ -11,33 +9,23 @@ namespace FullStackBrist.Server.Controllers
     [Route("api/[controller]")]
     public class MinimalSystemRequirementsController : Controller
     {
-        private readonly DataContext _dataContext;
-        private readonly MinimalSystemRequirementDao _minimalSystemRequirementDao;
+        private readonly MinimalSystemRequirementRepository _minimalSystemRequirementRepositories;
 
-        public MinimalSystemRequirementsController(DataContext dataContext, MinimalSystemRequirementDao minimalSystemRequirementDao)
+        public MinimalSystemRequirementsController(MinimalSystemRequirementRepository minimalSystemRequirementRepositories)
         {
-            _dataContext = dataContext;
-            _minimalSystemRequirementDao = minimalSystemRequirementDao;
+            _minimalSystemRequirementRepositories = minimalSystemRequirementRepositories;
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<MinimalSystemRequirementDao>>> GetAllMinimalSystemRequirements()
+        public async Task<ActionResult<List<MinimalSystemRequirementRepository>>> GetAllMinimalSystemRequirements()
         {
-            var requirements = await _minimalSystemRequirementDao.GetAllMinimalSystemRequirements();
+            var requirements = await _minimalSystemRequirementRepositories.GetAllMinimalSystemRequirements();
 
-            var response = requirements.Select(r => new MinimalSystemRequirement(id: r.id,
-                                                                                 gameId: r.gameId,
-                                                                                 oS: r.OS,
-                                                                                 processor: r.processor,
-                                                                                 rAM: r.RAM,
-                                                                                 video: r.video,
-                                                                                 freeDiskSpace: r.freeDiskSpace,
-                                                                                 createdAt: r.createdAt)).ToList();
-            return Ok(response);
+            return Ok(requirements);
         }
 
         [HttpPost]
-        public async Task<ActionResult<MinimalSystemRequirement>> CreateMinimalSystemRequirementDao([FromBody] MinimalSystemRequirementModel model)
+        public async Task<ActionResult<MinimalSystemRequirement>> CreateMinimalSystemRequirementRepositories([FromBody] MinimalSystemRequirementModel model)
         {
             var result = new MinimalSystemRequirement(Guid.NewGuid(),
                 model.gameId,
@@ -48,14 +36,26 @@ namespace FullStackBrist.Server.Controllers
                 model.freeDiskSpace,
                                             DateTime.Now
                                             );
-            var response = await _dataContext.dbMinimalSystemRequirements.AddAsync(result);
-            return Ok(response);
+            await _minimalSystemRequirementRepositories.Add(result);
+            return Ok(result);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<MinimalSystemRequirement>> GetMinimalSystemRequirement(Guid id)
         {
-            var response = await _minimalSystemRequirementDao.GetById(id);
+            var response = await _minimalSystemRequirementRepositories.GetById(id);
+            if (response == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(response);
+        }
+
+        [HttpGet("bygameid/{id}")]
+        public async Task<ActionResult<MinimalSystemRequirement>> GetRequirementsByGameId(Guid id)
+        {
+            var response = await _minimalSystemRequirementRepositories.GetByGameId(id);
             if (response == null)
             {
                 return NotFound();
@@ -67,16 +67,23 @@ namespace FullStackBrist.Server.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteMinimalSystemRequirement(Guid id)
         {
-            await _minimalSystemRequirementDao.DeleteMinimalSystemRequirement(id);
+            await _minimalSystemRequirementRepositories.DeleteMinimalSystemRequirement(id);
             return NoContent();
         }
 
         [HttpPut("{id}")]
         public async Task<ActionResult> UpdateMinimalSystemRequirement(Guid id, [FromBody] MinimalSystemRequirementModel requirement)
         {
-            var result = new MinimalSystemRequirement(id, requirement.gameId, requirement.OS, requirement.processor, requirement.RAM, requirement.video, requirement.freeDiskSpace, requirement.createdAt);
-            await _minimalSystemRequirementDao.UpdateMinimalSystemRequirement(result);
-            return NoContent();
+            var result = await _minimalSystemRequirementRepositories.UpdateMinimalSystemRequirement(new MinimalSystemRequirement(id, requirement.gameId, requirement.OS, requirement.processor, requirement.RAM, requirement.video, requirement.freeDiskSpace, requirement.createdAt));
+            return Ok(result);
+        }
+
+        [HttpPost("getall")]
+        public async Task<ActionResult<List<MinimalSystemRequirement>>> GetMinimalSystemRequirementByIds([FromBody] List<Guid> guidList)
+        {
+            var response = await _minimalSystemRequirementRepositories.GetByIds(guidList);
+
+            return Ok(response);
         }
     }
 }

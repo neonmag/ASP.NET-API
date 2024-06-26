@@ -1,39 +1,50 @@
 ﻿using FullStackBrist.Server.Models.Profile;
-using Slush.DAO.ProfileDao;
+using Slush.Repositories.ProfileRepository;
 using Slush.Data.Entity.Profile;
 using Slush.Services.Hash;
+using Slush.Services.Minio;
 
 namespace Slush.Services.RegistrationValidation
 {
     public class RegistrationService
     {
         private readonly HashPasswordService _passwordService;
-        private readonly UserDao _userDao;
+        private readonly MinioService _minioService;
+        private readonly UserRepository _userRepositories;
 
-        public RegistrationService(HashPasswordService passwordService, UserDao userDao)
+        public RegistrationService(HashPasswordService passwordService, UserRepository userRepositories, MinioService minioService)
         {
             _passwordService = passwordService;
-            _userDao = userDao;
+            _userRepositories = userRepositories;
+            _minioService = minioService;
         }
 
-        public async Task Registration(UserModel model)
+        public async Task<User> Registration(UserModel model)
         {
             var hashedPassword = _passwordService.Generate(model.passwordSalt);
 
-            var result = _userDao.Add(new User(
-                Guid.NewGuid(),
-                model.name,
-                hashedPassword,
-                model.email,
-                model.phone,
-                false,
-                DateTime.Now
-                ));
-        }
+            var user = await _userRepositories.GetByEmail(model.name);
 
-        public async Task<String> Login(UserModel model)
-        {
-            return "";
+            if(user == null)
+            {
+                var result = new User(
+                    Guid.NewGuid(),
+                    model.name,
+                    hashedPassword,
+                    model.email,
+                    model.description,
+                    model.image,
+                    false,
+                    0,
+                    0,
+                    DateTime.Now
+                    );
+                await _userRepositories.Add(result);
+
+                return result;
+            }
+
+            return null;
         }
     }
 }

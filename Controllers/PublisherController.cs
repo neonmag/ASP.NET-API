@@ -1,10 +1,8 @@
 ﻿using FullStackBrist.Server.Models.Creators;
-using FullStackBrist.Server.Models.Group;
 using Microsoft.AspNetCore.Mvc;
-using Slush.DAO.CreatorsDao;
-using Slush.DAO.GroupDao;
-using Slush.Data;
+using Slush.Repositories.CreatorsRepository;
 using Slush.Entity.Store.Product.Creators;
+using Slush.Services.Minio;
 
 namespace FullStackBrist.Server.Controllers
 {
@@ -12,33 +10,24 @@ namespace FullStackBrist.Server.Controllers
     [Route("api/[controller]")]
     public class PublisherController : Controller
     {
-        private readonly DataContext _dataContext;
-        private readonly PublisherDao _publisherDao;
+        private readonly PublisherRepository _publisherRepositories;
+        private readonly MinioService _minioService;
 
-        public PublisherController(DataContext dataContext, PublisherDao publisherDao)
+        public PublisherController(PublisherRepository publisherRepositories, MinioService minioService)
         {
-            _dataContext = dataContext;
-            _publisherDao = publisherDao;
+            _publisherRepositories = publisherRepositories;
+            _minioService = minioService;
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<PublisherDao>>> GetAllPublishers()
+        public async Task<ActionResult<List<PublisherRepository>>> GetAllPublishers()
         {
-            var publishers = await _publisherDao.GetAllPublishers();
+            var publishers = await _publisherRepositories.GetAllPublishers();
 
-            var response = publishers.Select(p => new Publisher(id: p.id,
-                                                                subscribersCount: p.subscribersCount,
-                                                                name: p.name,
-                                                                description: p.description,
-                                                                avatar: p.avatar,
-                                                                backgroundImage: p.backgroundImage,
-                                                                urlForNewsPage: p.urlForNewsPage,
-                                                                createdAt: p.createdAt)).ToList();
-
-            return Ok(response);
+            return Ok(publishers);
         }
         [HttpPost]
-        public async Task<ActionResult<Publisher>> CreatePublisher([FromBody] PublisherModel model)
+        public async Task<ActionResult<Publisher>> CreatePublisher([FromBody] PublisherModel model, IFormFile? avatar, IFormFile? background)
         {
             var result = new Publisher(Guid.NewGuid(),
                 0,
@@ -49,15 +38,54 @@ namespace FullStackBrist.Server.Controllers
                 null,
                 DateTime.Now);
 
-            var response = await _dataContext.dbPublishers.AddAsync(result);
+            if (avatar != null || avatar.Length != 0)
+            {
+                using (var stream = avatar.OpenReadStream())
+                {
+                    try
+                    {
+                        String imageUrl = await _minioService.SaveFile("images", result.id, avatar.FileName, stream);
 
-            return Ok(response);
+                        var url = await _minioService.GetUrlToFile(imageUrl);
+
+                        result.avatar = url;
+                    }
+                    catch (Exception ex)
+                    {
+                        return StatusCode(500, $"Failed to upload file: {ex.Message}");
+                    }
+                }
+            }
+
+
+            if (background != null || background.Length != 0)
+            {
+                using (var stream = avatar.OpenReadStream())
+                {
+                    try
+                    {
+                        String imageUrl = await _minioService.SaveFile("images", result.id, background.FileName, stream);
+
+                        var url = await _minioService.GetUrlToFile(imageUrl);
+
+                        result.backgroundImage = url;
+                    }
+                    catch (Exception ex)
+                    {
+                        return StatusCode(500, $"Failed to upload file: {ex.Message}");
+                    }
+                }
+            }
+
+            await _publisherRepositories.Add(result);
+
+            return Ok(result);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<Publisher>> GetPublisher(Guid id)
         {
-            var response = await _publisherDao.GetById(id);
+            var response = await _publisherRepositories.GetById(id);
             if (response == null)
             {
                 return NotFound();
@@ -69,16 +97,62 @@ namespace FullStackBrist.Server.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeletePublisher(Guid id)
         {
-            await _publisherDao.DeletePublisher(id);
+            await _publisherRepositories.DeletePublisher(id);
             return NoContent();
         }
 
         [HttpPut("{id}")]
-        public async Task<ActionResult> UpdatePublisher(Guid id, [FromBody] PublisherModel publisher)
+        public async Task<ActionResult> UpdatePublisher(Guid id, [FromBody] PublisherModel publisher, IFormFile? avatar, IFormFile? background)
         {
-            var result = new Publisher(id, publisher.subscribersCount, publisher.name, publisher.description, publisher.avatar, publisher.backgroundImage, publisher.urlForNewsPage, publisher.createdAt);
-            await _publisherDao.UpdatePublisher(result);
-            return NoContent();
+            if (avatar != null || avatar.Length != 0)
+            {
+                using (var stream = avatar.OpenReadStream())
+                {
+                    try
+                    {
+                        String imageUrl = await _minioService.SaveFile("images", id, avatar.FileName, stream);
+
+                        var url = await _minioService.GetUrlToFile(imageUrl);
+
+                        publisher.avatar = url;
+                    }
+                    catch (Exception ex)
+                    {
+                        return StatusCode(500, $"Failed to upload file: {ex.Message}");
+                    }
+                }
+            }
+
+
+            if (background != null || background.Length != 0)
+            {
+                using (var stream = avatar.OpenReadStream())
+                {
+                    try
+                    {
+                        String imageUrl = await _minioService.SaveFile("images", id, background.FileName, stream);
+
+                        var url = await _minioService.GetUrlToFile(imageUrl);
+
+                        publisher.backgroundImage = url;
+                    }
+                    catch (Exception ex)
+                    {
+                        return StatusCode(500, $"Failed to upload file: {ex.Message}");
+                    }
+                }
+            }
+
+            var result = await _publisherRepositories.UpdatePublisher(new Publisher(id, publisher.subscribersCount, publisher.name, publisher.description, publisher.avatar, publisher.backgroundImage, publisher.urlForNewsPage, publisher.createdAt));
+            return Ok(result);
+        }
+
+        [HttpPost("getall")]
+        public async Task<ActionResult<List<Publisher>>> GetAllPublishersByIds([FromBody] List<Guid> guidList)
+        {
+            var response = await _publisherRepositories.GetByIds(guidList);
+
+            return Ok(response);
         }
     }
 }

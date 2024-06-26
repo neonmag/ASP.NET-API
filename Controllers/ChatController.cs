@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Slush.DAO.ChatDao;
-using Slush.Data;
+using Slush.Repositories.ChatRepository;
 using Slush.Entity.Chat;
 using Slush.Models.Chat;
 
@@ -10,40 +9,34 @@ namespace Slush.Controllers
     [Route("api/[controller]")]
     public class ChatController : Controller
     {
-        private readonly DataContext _dataContext;
-        private readonly ChatDao _chatDao;
+        private readonly ChatRepository _ChatRepository;
 
-        public ChatController(DataContext dataContext, ChatDao chatDao)
+        public ChatController(ChatRepository ChatRepository)
         {
-            _dataContext = dataContext;
-            _chatDao = chatDao;
+            _ChatRepository = ChatRepository;
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<ChatDao>>> GetAllChats()
+        public async Task<ActionResult<List<ChatRepository>>> GetAllChats()
         {
-            var chats = await _chatDao.GetAllChats();
-            var response = chats.Select(c => new Chat(id: c.id,
-                firstUser: c.firstUser,
-                secondUser: c.secondUser,
-                createdAt: c.createdAt));
+            var chats = await _ChatRepository.GetAllChats();
 
-            return Ok(response);
+            return Ok(chats);
         }
 
         [HttpPost]
         public async Task<ActionResult<Chat>> CreateChat([FromBody] ChatModel model)
         {
             var result = new Chat(Guid.NewGuid(), model.firstUser, model.secondUser, DateTime.Now);
-            var response =  await _dataContext.dbChats.AddAsync(result);
+            await _ChatRepository.AddChat(result);
 
-            return Ok(response);
+            return Ok(result);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<Chat>> GetChat(Guid id)
         {
-            var response = await _chatDao.GetById(id);
+            var response = await _ChatRepository.GetById(id);
 
             if(response == null)
             {
@@ -55,18 +48,24 @@ namespace Slush.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteChat(Guid id)
         {
-            await _chatDao.DeleteChat(id);
+            await _ChatRepository.DeleteChat(id);
             return NoContent();
         }
 
         [HttpPut("{id}")]
         public async Task<ActionResult> UpdateChat(Guid id, [FromBody] ChatModel model)
         {
-            var result = new Chat(id, model.firstUser, model.secondUser, DateTime.Now);
+            var result = await _ChatRepository.UpdateChat(new Chat(id, model.firstUser, model.secondUser, DateTime.Now));
 
-            await _chatDao.UpdateChat(result);
+            return Ok(result);
+        }
 
-            return NoContent();
+        [HttpPost("getall")]
+        public async Task<ActionResult<List<Chat>>> GetAllChatsByIds([FromBody] List<Guid> guidList)
+        {
+            var response = await _ChatRepository.GetByIds(guidList);
+
+            return Ok(response);
         }
     }
 }

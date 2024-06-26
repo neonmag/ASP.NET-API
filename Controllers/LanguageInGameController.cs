@@ -1,7 +1,6 @@
 ﻿using FullStackBrist.Server.Models.Language;
 using Microsoft.AspNetCore.Mvc;
-using Slush.DAO.LanguageDao;
-using Slush.Data;
+using Slush.Repositories.LanguageRepository;
 using Slush.Data.Entity;
 
 namespace FullStackBrist.Server.Controllers
@@ -10,25 +9,19 @@ namespace FullStackBrist.Server.Controllers
     [Route("api/[controller]")]
     public class LanguageInGameController : Controller
     {
-        private readonly DataContext _dataContext;
-        private readonly LanguageInGameDao _languageInGameDao;
+        private readonly LanguageInGameRepository _languageInGameRepositories;
 
-        public LanguageInGameController(DataContext dataContext, LanguageInGameDao languageInGameDao)
+        public LanguageInGameController(LanguageInGameRepository languageInGameRepositories)
         {
-            _dataContext = dataContext;
-            _languageInGameDao = languageInGameDao;
+            _languageInGameRepositories = languageInGameRepositories;
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<LanguageInGameDao>>> GetAllLanguagesInGame()
+        public async Task<ActionResult<List<LanguageInGameRepository>>> GetAllLanguagesInGame()
         {
-            var _languages = await _languageInGameDao.GetAllLanguageInGames();
+            var _languages = await _languageInGameRepositories.GetAllLanguageInGames();
 
-            var response = _languages.Select(l => new LanguageInGame(id: l.id,
-                                                                     gameId: l.gameId,
-                                                                     languageId: l.languageId,
-                                                                     createdAt: l.createdAt)).ToList();
-            return Ok(response);
+            return Ok(_languages);
         }
 
 
@@ -40,15 +33,15 @@ namespace FullStackBrist.Server.Controllers
                                             model.languageId,
                                             DateTime.Now
                                             );
-            var response = await _dataContext.dbLanguagesInGame.AddAsync(result);
+            await _languageInGameRepositories.Add(result);
 
-            return Ok(response);
+            return Ok(result);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<LanguageInGame>> GetLanguageInGame(Guid id)
         {
-            var response = await _languageInGameDao.GetById(id);
+            var response = await _languageInGameRepositories.GetById(id);
             if (response == null)
             {
                 return NotFound();
@@ -60,16 +53,23 @@ namespace FullStackBrist.Server.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteLanguageInGame(Guid id)
         {
-            await _languageInGameDao.DeleteLanguageInGame(id);
+            await _languageInGameRepositories.DeleteLanguageInGame(id);
             return NoContent();
         }
 
         [HttpPut("{id}")]
         public async Task<ActionResult> UpdateLanguageInGame(Guid id, [FromBody] LanguageInGameModel language)
         {
-            var result = new LanguageInGame(id, language.gameId, language.languageId, language.createdAt);
-            await _languageInGameDao.UpdateLanguageInGame(result);
-            return NoContent();
+            var result = await _languageInGameRepositories.UpdateLanguageInGame(new LanguageInGame(id, language.gameId, language.languageId, language.createdAt));
+            return Ok(result);
+        }
+
+        [HttpPost("getall")]
+        public async Task<ActionResult<List<LanguageInGame>>> GetAllLanguagesInGameByIds([FromBody] List<Guid> guidList)
+        {
+            var response = await _languageInGameRepositories.GetByIds(guidList);
+
+            return Ok(response);
         }
     }
 }

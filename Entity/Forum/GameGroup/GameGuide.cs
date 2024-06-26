@@ -1,4 +1,4 @@
-﻿namespace Slush.Data.Entity.Community.GameGroup
+namespace Slush.Data.Entity.Community.GameGroup
 {
     public class GameGuide
     {
@@ -6,7 +6,7 @@
         {
         }
 
-        public GameGuide(Guid id, String? title, String? description, int likesCount, Guid gameId, Guid authorId, Guid gameGroupId, String? content, DateTime? createdAt)
+        public GameGuide(Guid id, String? title, String? description, int likesCount, Guid gameId, Guid authorId, Guid gameGroupId, String? content, String? contentUrl, DateTime? createdAt)
         {
             this.id = id;
             this.title = title;
@@ -16,6 +16,7 @@
             this.authorId = authorId;
             this.gameGroupId = gameGroupId;
             this.content = content;
+            this.contentUrl = contentUrl;
             this.createdAt = createdAt;
         }
         public Guid id { get; set; }
@@ -26,6 +27,7 @@
         public Guid authorId { get; set; }
         public Guid gameGroupId { get; set; }
         public String? content {  get; set; }
+        public String? contentUrl {  get; set; }
         public DateTime? createdAt { get; set; }
         public DateTime? deleteAt { get; set; }
     }

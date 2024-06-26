@@ -1,13 +1,9 @@
 ﻿using FullStackBrist.Server.Models.Group;
-using FullStackBrist.Server.Models.Profile;
-using FullStackBrist.Server.Models.Requirements;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Slush.DAO.GroupDao;
-using Slush.DAO.RequirementsDao;
-using Slush.Data;
-using Slush.Data.Entity;
+using Slush.Repositories.GroupRepository;
 using Slush.Data.Entity.Community;
-using Slush.Entity.Profile;
+using Slush.Services.Minio;
 
 namespace FullStackBrist.Server.Controllers
 {
@@ -15,35 +11,26 @@ namespace FullStackBrist.Server.Controllers
     [Route("api/[controller]")]
     public class PostController : Controller
     {
-        private readonly DataContext _dataContext;
-        private readonly PostDao _postDao;
+        private readonly PostRepository _postRepositories;
+        private readonly MinioService _minioService;
 
-        public PostController(DataContext dataContext, PostDao postDao)
+        public PostController(PostRepository postRepositories, MinioService minioService)
         {
-            _dataContext = dataContext;
-            _postDao = postDao;
+            _postRepositories = postRepositories;
+            _minioService = minioService;
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<PostDao>>> GetAllPosts()
+        public async Task<ActionResult<List<PostRepository>>> GetAllPosts()
         {
-            var _posts = await _postDao.GetAllPosts();
+            var _posts = await _postRepositories.GetAllPosts();
 
-            var response = _posts.Select(p => new Post(id: p.id,
-                                                       title: p.title,
-                                                       description: p.description,
-                                                       likesCount: p.likesCount,
-                                                       discussionId: p.discussionId,
-                                                       authorId: p.authorId,
-                                                       content: p.content,
-                                                       createdAt: p.createdAt)).ToList();
-
-            return Ok(response);
+            return Ok(_posts);
         }
 
 
         [HttpPost]
-        public async Task<ActionResult<Post>> CreatePost([FromBody] PostModel model)
+        public async Task<ActionResult<Post>> CreatePost([FromBody] PostModel model, IFormFile? file)
         {
             var result = new Post(Guid.NewGuid(),
                 model.title,
@@ -52,16 +39,38 @@ namespace FullStackBrist.Server.Controllers
                 model.discussionId,
                model.authorId,
                model.content,
+               model.contentUrl,
                                             DateTime.Now
                                             );
-            var response = await _dataContext.dbPosts.AddAsync(result);
-            return Ok(response);
+
+
+            if (file != null || file.Length != 0)
+            {
+                using (var stream = file.OpenReadStream())
+                {
+                    try
+                    {
+                        String imageUrl = await _minioService.SaveFile("images", result.id, file.FileName, stream);
+
+                        var url = await _minioService.GetUrlToFile(imageUrl);
+
+                        result.contentUrl = url;
+                    }
+                    catch (Exception ex)
+                    {
+                        return StatusCode(500, $"Failed to upload file: {ex.Message}");
+                    }
+                }
+            }
+
+            await _postRepositories.Add(result);
+            return Ok(result);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<Post>> GetPost(Guid id)
         {
-            var response = await _postDao.GetById(id);
+            var response = await _postRepositories.GetById(id);
             if (response == null)
             {
                 return NotFound();
@@ -73,16 +82,58 @@ namespace FullStackBrist.Server.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeletePost(Guid id)
         {
-            await _postDao.DeletePost(id);
+            await _postRepositories.DeletePost(id);
             return NoContent();
         }
 
+        [Authorize]
         [HttpPut("{id}")]
-        public async Task<ActionResult> UpdatePost(Guid id, [FromBody] PostModel post)
+        public async Task<ActionResult> UpdatePost(Guid id, [FromBody] PostModel post, IFormFile? file)
         {
-            var result = new Post(id, post.title, post.description, post.likesCount,  post.discussionId,  post.authorId, post.content, post.createdAt);
-            await _postDao.UpdatePost(result);
-            return NoContent();
+
+            if (file != null || file.Length != 0)
+            {
+                using (var stream = file.OpenReadStream())
+                {
+                    try
+                    {
+                        String imageUrl = await _minioService.SaveFile("images", id, file.FileName, stream);
+
+                        var url = await _minioService.GetUrlToFile(imageUrl);
+
+                        post.contentUrl = url;
+                    }
+                    catch (Exception ex)
+                    {
+                        return StatusCode(500, $"Failed to upload file: {ex.Message}");
+                    }
+                }
+            }
+
+            var result = await _postRepositories.UpdatePost(new Post(id, post.title, post.description, post.likesCount, post.discussionId, post.authorId, post.content, post.contentUrl, post.createdAt));
+            return Ok(result);
+        }
+
+        [HttpGet("byattachedid/{id}")]
+        public async Task<ActionResult<List<Post>>> GetByAttachedId(Guid id)
+        {
+            var response = await _postRepositories.GetByAttachedId(id);
+
+            if (response == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(response);
+        }
+
+
+        [HttpPost("getall")]
+        public async Task<ActionResult<List<Post>>> GetAllPostsByIds([FromBody] List<Guid> guidList)
+        {
+            var response = await _postRepositories.GetByIds(guidList);
+
+            return Ok(response);
         }
     }
 }

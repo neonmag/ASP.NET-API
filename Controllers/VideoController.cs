@@ -1,8 +1,8 @@
 ﻿using FullStackBrist.Server.Models.Profile;
 using Microsoft.AspNetCore.Mvc;
-using Slush.DAO.ProfileDao;
-using Slush.Data;
+using Slush.Repositories.ProfileRepository;
 using Slush.Data.Entity.Profile;
+using Slush.Services.Minio;
 
 namespace FullStackBrist.Server.Controllers
 {
@@ -10,34 +10,26 @@ namespace FullStackBrist.Server.Controllers
     [Route("api/[controller]")]
     public class VideoController : Controller
     {
-        private readonly DataContext _dataContext;
-        private readonly VideoDao _videoDao;
+        private readonly VideoRepository _videoRepositories;
+        private readonly MinioService _minioService;
 
-        public VideoController(DataContext dataContext, VideoDao videoDao)
+        public VideoController(VideoRepository videoRepositories, MinioService minioService)
         {
-            _dataContext = dataContext;
-            _videoDao = videoDao;
+            _videoRepositories = videoRepositories;
+            _minioService = minioService;
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<VideoDao>>> GetAllVideos()
+        public async Task<ActionResult<List<VideoRepository>>> GetAllVideos()
         {
-            var videos = await _videoDao.GetAllVideos();
+            var videos = await _videoRepositories.GetAllVideos();
 
-            var response = videos.Select(v => new Video(id: v.id,
-                                                        title: v.title,
-                                                        description: v.description,
-                                                        likesCount: v.likesCount,
-                                                        gameId: v.gameId,
-                                                        authorId: v.authorId,
-                                                        videoUrl: v.videoUrl,
-                                                        createdAt: v.createdAt)).ToList();
-            return Ok(response);
+            return Ok(videos);
         }
 
 
         [HttpPost]
-        public async Task<ActionResult<Video>> CreateVideo([FromBody] VideoModel model)
+        public async Task<ActionResult<Video>> CreateVideo([FromBody] VideoModel model, IFormFile? file)
         {
             var result = new Video(Guid.NewGuid(),
                 model.title,
@@ -45,18 +37,37 @@ namespace FullStackBrist.Server.Controllers
                 0,
                 model.gameId,
                 model.authorId,
-                model.videoUrl,
+                model.contentUrl,
                 DateTime.Now);
 
-            var response = await _dataContext.dbVideos.AddAsync(result);
+            if (file != null || file.Length != 0)
+            {
+                using (var stream = file.OpenReadStream())
+                {
+                    try
+                    {
+                        String imageUrl = await _minioService.SaveFile("images", result.id, file.FileName, stream);
 
-            return Ok(response);
+                        var url = await _minioService.GetUrlToFile(imageUrl);
+
+                        result.contentUrl = url;
+                    }
+                    catch (Exception ex)
+                    {
+                        return StatusCode(500, $"Failed to upload file: {ex.Message}");
+                    }
+                }
+            }
+
+            await _videoRepositories.Add(result);
+
+            return Ok(result);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<Video>> GetVideo(Guid id)
         {
-            var response = await _videoDao.GetById(id);
+            var response = await _videoRepositories.GetById(id);
             if (response == null)
             {
                 return NotFound();
@@ -68,17 +79,67 @@ namespace FullStackBrist.Server.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteVideo(Guid id)
         {
-            await _videoDao.DeleteVideo(id);
+            await _videoRepositories.DeleteVideo(id);
             return NoContent();
         }
 
         [HttpPut("{id}")]
-        public async Task<ActionResult> UpdateVideo(Guid id, [FromBody] VideoModel video)
+        public async Task<ActionResult> UpdateVideo(Guid id, [FromBody] VideoModel video, IFormFile? file)
         {
-            var result = new Video(id, video.title, video.description, video.likesCount, video.gameId, video.authorId, video.videoUrl, video.createdAt);
-            await _videoDao.UpdateVideo(result);
-            return NoContent();
+            if (file != null || file.Length != 0)
+            {
+                using (var stream = file.OpenReadStream())
+                {
+                    try
+                    {
+                        String imageUrl = await _minioService.SaveFile("images", id, file.FileName, stream);
+
+                        var url = await _minioService.GetUrlToFile(imageUrl);
+
+                        video.contentUrl = url;
+                    }
+                    catch (Exception ex)
+                    {
+                        return StatusCode(500, $"Failed to upload file: {ex.Message}");
+                    }
+                }
+            }
+            var result = await _videoRepositories.UpdateVideo(new Video(id, video.title, video.description, video.likesCount, video.gameId, video.authorId, video.contentUrl, video.createdAt));
+            return Ok(result);
         }
 
+        [HttpGet("byuserid/{id}")]
+        public async Task<ActionResult<List<Video>>> GetByUserId(Guid id)
+        {
+            var response = await _videoRepositories.GetByUId(id);
+
+            if(response == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(response);
+        }
+
+        [HttpGet("bygameid/{id}")]
+        public async Task<ActionResult<List<Video>>> GetByGameId(Guid id)
+        {
+            var response = await _videoRepositories.GetByGameId(id);
+
+            if(response == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(response);
+        }
+
+        [HttpPost("getall")]
+        public async Task<ActionResult<List<Video>>> GetAllVideosByIds([FromBody] List<Guid> guidList)
+        {
+            var response = await _videoRepositories.GetByIds(guidList);
+
+            return Ok(response);
+        }
     }
 }

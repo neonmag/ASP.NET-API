@@ -1,12 +1,8 @@
-﻿using FullStackBrist.Server.Models.Group;
-using FullStackBrist.Server.Models.Profile;
+﻿using FullStackBrist.Server.Models.Profile;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.VisualBasic;
-using Slush.DAO.GroupDao;
-using Slush.DAO.ProfileDao;
-using Slush.Data;
-using Slush.Data.Entity.Community;
+using Slush.Repositories.ProfileRepository;
 using Slush.Data.Entity.Profile;
+using System.Net.WebSockets;
 
 namespace FullStackBrist.Server.Controllers
 {
@@ -14,26 +10,19 @@ namespace FullStackBrist.Server.Controllers
     [Route("api/[controller]")]
     public class UserCommentController : Controller
     {
-        private readonly DataContext _dataContext;
-        private readonly UserCommentDao _userCommentDao;
+        private readonly UserCommentRepository _userCommentRepositories;
 
-        public UserCommentController(DataContext dataContext, UserCommentDao userCommentDao)
+        public UserCommentController(UserCommentRepository userCommentRepositories)
         {
-            _dataContext = dataContext;
-            _userCommentDao = userCommentDao;
+            _userCommentRepositories = userCommentRepositories;
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<UserCommentDao>>> GetAllUserComments()
+        public async Task<ActionResult<List<UserCommentRepository>>> GetAllUserComments()
         {
-            var _userComments = await _userCommentDao.GetAllUserComments();
+            var _userComments = await _userCommentRepositories.GetAllUserComments();
 
-            var response = _userComments.Select(s => new UserComment(id: s.id,
-                                                                     userId: s.userId,
-                                                                     authorId: s.authorId,
-                                                                     content: s.content,
-                                                                     createdAt: s.createdAt)).ToList();
-            return Ok(response);
+            return Ok(_userComments);
         }
 
         [HttpPost]
@@ -45,15 +34,15 @@ namespace FullStackBrist.Server.Controllers
                 model.content,
                 DateTime.Now);
 
-            var response = await _dataContext.dbUserComments.AddAsync(result);
+            await _userCommentRepositories.Add(result);
 
-            return Ok(response);
+            return Ok(result);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<UserComment>> GetUserComment(Guid id)
         {
-            var response = await _userCommentDao.GetById(id);
+            var response = await _userCommentRepositories.GetById(id);
             if (response == null)
             {
                 return NotFound();
@@ -65,16 +54,36 @@ namespace FullStackBrist.Server.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteUserComment(Guid id)
         {
-            await _userCommentDao.DeleteUserComment(id);
+            await _userCommentRepositories.DeleteUserComment(id);
             return NoContent();
         }
 
         [HttpPut("{id}")]
         public async Task<ActionResult> UpdateUserComment(Guid id, [FromBody] UserCommentModel comment)
         {
-            var result = new UserComment(id, comment.userId, comment.authorId, comment.content, comment.createdAt);
-            await _userCommentDao.UpdateUserComment(result);
-            return NoContent();
+            var result = await _userCommentRepositories.UpdateUserComment(new UserComment(id, comment.userId, comment.authorId, comment.content, comment.createdAt));
+            return Ok(result);
+        }
+
+        [HttpGet("byuserid/{id}")]
+        public async Task<ActionResult<List<UserComment>>> GetAllUserCommentsById(Guid id)
+        {
+            var response = await _userCommentRepositories.GetByUId(id);
+
+            if(response == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(response);
+        }
+
+        [HttpPost("getall")]
+        public async Task<ActionResult<List<UserComment>>> GetAllUserCommentsByIds([FromBody] List<Guid> guidList)
+        {
+            var response = await _userCommentRepositories.GetByIds(guidList);
+
+            return Ok(response);
         }
     }
 }

@@ -1,10 +1,8 @@
-﻿using FullStackBrist.Server.Models.Creators;
-using FullStackBrist.Server.Models.Profile;
+﻿using FullStackBrist.Server.Models.Profile;
 using Microsoft.AspNetCore.Mvc;
-using Slush.DAO.CreatorsDao;
-using Slush.DAO.ProfileDao;
-using Slush.Data;
+using Slush.Repositories.ProfileRepository;
 using Slush.Data.Entity.Profile;
+using Slush.Services.Minio;
 
 namespace FullStackBrist.Server.Controllers
 {
@@ -12,34 +10,26 @@ namespace FullStackBrist.Server.Controllers
     [Route("api/[controller]")]
     public class ScreenshotController : Controller
     {
-        private readonly DataContext _dataContext;
-        private readonly ScreenshotDao _screenshotDao;
+        private readonly ScreenshotRepository _screenshotRepositories;
+        private readonly MinioService _minioService;
 
-        public ScreenshotController(DataContext dataContext, ScreenshotDao screenshotDao)
+        public ScreenshotController(ScreenshotRepository screenshotRepositories, MinioService minioService)
         {
-            _dataContext = dataContext;
-            _screenshotDao = screenshotDao;
+            _screenshotRepositories = screenshotRepositories;
+            _minioService = minioService;
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<ScreenshotDao>>> GetAllScreenshots()
+        public async Task<ActionResult<List<ScreenshotRepository>>> GetAllScreenshots()
         {
-            var _screenshots = await _screenshotDao.GetAllScreenshots();
+            var _screenshots = await _screenshotRepositories.GetAllScreenshots();
 
-            var response = _screenshots.Select(s => new Screenshot(id: s.id,
-                                                                   title: s.title,
-                                                                   description: s.description,
-                                                                   likesCount: s.likesCount,
-                                                                   gameId: s.gameId,
-                                                                   authorId: s.authorId,
-                                                                   screenshotUrl: s.screenshotUrl,
-                                                                   createdAt: s.createdAt)).ToList();
-            return Ok(response);
+            return Ok(_screenshots);
         }
 
 
         [HttpPost]
-        public async Task<ActionResult<Screenshot>> CreateScreenshot([FromBody] ScreenshotModel model)
+        public async Task<ActionResult<Screenshot>> CreateScreenshot([FromBody] ScreenshotModel model, IFormFile? file)
         {
             var result = new Screenshot(Guid.NewGuid(),
                 model.title,
@@ -47,18 +37,49 @@ namespace FullStackBrist.Server.Controllers
                 0,
                 model.gameId,
                 model.authorId,
-                model.screenshotUrl,
+                model.contentUrl,
                 DateTime.Now);
 
-            var response = await _dataContext.dbScreenshots.AddAsync(result);
+            if (file != null || file.Length != 0)
+            {
+                using (var stream = file.OpenReadStream())
+                {
+                    try
+                    {
+                        String imageUrl = await _minioService.SaveFile("images", result.id, file.FileName, stream);
 
-            return Ok(response);
+                        var url = await _minioService.GetUrlToFile(imageUrl);
+
+                        result.contentUrl = url;
+                    }
+                    catch (Exception ex)
+                    {
+                        return StatusCode(500, $"Failed to upload file: {ex.Message}");
+                    }
+                }
+            }
+
+            await _screenshotRepositories.Add(result);
+
+            return Ok(result);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<Screenshot>> GetScreenshot(Guid id)
         {
-            var response = await _screenshotDao.GetById(id);
+            var response = await _screenshotRepositories.GetById(id);
+            if (response == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(response);
+        }
+
+        [HttpGet("bygameid/{id}")]
+        public async Task<ActionResult<List<Screenshot>>> GetScreenshotByGame(Guid id)
+        {
+            var response = await _screenshotRepositories.GetByGameId(id);
             if (response == null)
             {
                 return NotFound();
@@ -70,16 +91,55 @@ namespace FullStackBrist.Server.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteScreenshot(Guid id)
         {
-            await _screenshotDao.DeleteScreenshot(id);
+            await _screenshotRepositories.DeleteScreenshot(id);
             return NoContent();
         }
 
         [HttpPut("{id}")]
-        public async Task<ActionResult> UpdateScreenshot(Guid id, [FromBody] ScreenshotModel screenshot)
+        public async Task<ActionResult> UpdateScreenshot(Guid id, [FromBody] ScreenshotModel screenshot, IFormFile? file)
         {
-            var result = new Screenshot(id, screenshot.title, screenshot.description, screenshot.likesCount,  screenshot.gameId, screenshot.authorId, screenshot.screenshotUrl, screenshot.createdAt);
-            await _screenshotDao.UpdateScreenshot(result);
-            return NoContent();
+            if (file != null || file.Length != 0)
+            {
+                using (var stream = file.OpenReadStream())
+                {
+                    try
+                    {
+                        String imageUrl = await _minioService.SaveFile("images", id, file.FileName, stream);
+
+                        var url = await _minioService.GetUrlToFile(imageUrl);
+
+                        screenshot.contentUrl = url;
+                    }
+                    catch (Exception ex)
+                    {
+                        return StatusCode(500, $"Failed to upload file: {ex.Message}");
+                    }
+                }
+            }
+
+            var result = await _screenshotRepositories.UpdateScreenshot(new Screenshot(id, screenshot.title, screenshot.description, screenshot.likesCount, screenshot.gameId, screenshot.authorId, screenshot.contentUrl, screenshot.createdAt));
+            return Ok(result);
+        }
+
+        [HttpGet("byuserid/{id}")]
+        public async Task<ActionResult<List<Screenshot>>> GetByUserId(Guid id)
+        {
+            var response = await _screenshotRepositories.GetByUserId(id);
+
+            if(response == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(response);
+        }
+
+        [HttpPost("getall")]
+        public async Task<ActionResult<List<Screenshot>>> GetAllScreenshotsByIds([FromBody] List<Guid> guidList)
+        {
+            var response = await _screenshotRepositories.GetByIds(guidList);
+
+            return Ok(response);
         }
     }
 }

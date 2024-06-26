@@ -34,9 +34,14 @@ namespace Slush.Data
         public DbSet<User>                     dbUsers                     { get; set; }
         public DbSet<UserComment>              dbUserComments              { get; set; }
         public DbSet<OwnedGame>                dbOwnedGames                { get; set; }
+        public DbSet<OwnedDlc>                 dbOwnedDlcs                { get; set; }
         public DbSet<WishedGame>               dbWishedGames               { get; set; }
         public DbSet<CategoryByUserForGame>    dbCategoryByUserForGames    { get; set; }
         public DbSet<UserCategory>             dbUserCategories            { get; set; }
+        public DbSet<Settings>                 dbSettings                  { get; set; }
+        public DbSet<WalletTransactions>       dbWalletTransactions        { get; set; }
+        public DbSet<Achievement>              dbAchievements              { get; set; }
+        public DbSet<AchievementByUser>        dbAchievementByUser         { get; set; }
         #endregion
         #region Categories
         public DbSet<Categories>               dbCategories                { get; set; }
@@ -60,6 +65,8 @@ namespace Slush.Data
         #region Game
         public DbSet<DLCInShop>                dbDLCsInShop                { get; set; }
         public DbSet<GameInShop>               dbGamesInShops              { get; set; }
+        public DbSet<GameBundle>               dbGameBundles               { get; set; }
+        public DbSet<GameBundleCollection>     dbGameBundleCollections     { get; set; }
         #endregion
         #region Chat
         public DbSet<Chat>                     dbChats                     { get; set; }
@@ -78,13 +85,13 @@ namespace Slush.Data
                  .HasOne<Chat>()
                  .WithMany()
                  .HasForeignKey(m => m.chatId)
-                 .OnDelete(DeleteBehavior.Cascade);
+                 .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Message>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(m => m.senderId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Chat>()
                .HasOne<User>()
@@ -102,271 +109,331 @@ namespace Slush.Data
                 .HasOne<GameInShop>()
                 .WithMany()
                 .HasForeignKey(gg => gg.gameId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GameGuide>()
                .HasOne<GameGroup>()
                .WithMany()
                .HasForeignKey(gg => gg.gameGroupId)
-               .OnDelete(DeleteBehavior.Cascade);
+               .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GameGuide>()
                 .HasOne<GameInShop>()
                 .WithMany()
                 .HasForeignKey(gg => gg.gameId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GameNews>()
                 .HasOne<GameGroup>()
                 .WithMany()
                 .HasForeignKey(gn => gn.gameGroupId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GameNews>()
                 .HasOne<GameInShop>()
                 .WithMany()
                 .HasForeignKey(gn => gn.gameId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GameGuide>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(gg => gg.authorId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GameNews>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(gg => gg.authorId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GameTopic>()
                 .HasOne<GameGroup>()
                 .WithMany()
                 .HasForeignKey(gt => gt.attachedId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GamePosts>()
                 .HasOne<GameInShop>()
                 .WithMany()
                 .HasForeignKey(gp => gp.gameId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            modelBuilder.Entity<GamePosts>()
-                .HasOne<GameTopic>()
-                .WithMany()
-                .HasForeignKey(gp => gp.gameTopicId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GamePosts>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(gp => gp.authorId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GameComment>()
                 .HasOne<GamePosts>()
                 .WithMany()
                 .HasForeignKey(gc => gc.gamePostId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GameComment>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(gc => gc.authorId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Group>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(g => g.attachedId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Topic>()
                 .HasOne<Group>()
                 .WithMany()
                 .HasForeignKey(g => g.attachedId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Topic>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(g => g.authorId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Post>()
                 .HasOne<Topic>()
                 .WithMany()
                 .HasForeignKey(t => t.discussionId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Post>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(u => u.authorId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GroupComment>()
                 .HasOne<Group>()
                 .WithMany()
                 .HasForeignKey(g => g.groupId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GroupComment>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(g => g.userId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Friends>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(u => u.userId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
             
             modelBuilder.Entity<Friends>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(u => u.friendId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<OwnedGame>()
                 .HasOne<GameInShop>()
                 .WithMany()
                 .HasForeignKey(g => g.ownedGameId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<OwnedGame>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(g => g.userId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<OwnedDlc>()
+                .HasOne<DLCInShop>()
+                .WithMany()
+                .HasForeignKey(g => g.ownedDlcId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<OwnedDlc>()
+                .HasOne<User>()
+                .WithMany()
+                .HasForeignKey(g => g.userId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Screenshot>()
                 .HasOne<GameInShop>()
                 .WithMany()
                 .HasForeignKey(g => g.gameId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Screenshot>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(g => g.authorId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<UserCategory>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(u => u.userId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<UserCategory>()
                 .HasOne<OwnedGame>()
                 .WithMany()
                 .HasForeignKey(u => u.ownedGameId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<UserCategory>()
                 .HasOne<CategoryByUserForGame>()
                 .WithMany()
                 .HasForeignKey(u => u.categoryId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<UserComment>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(u => u.userId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<UserComment>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(u => u.authorId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Video>()
                 .HasOne<GameInShop>()
                 .WithMany()
                 .HasForeignKey(g => g.gameId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Video>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(u => u.authorId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<WishedGame>()
                 .HasOne<GameInShop>()
                 .WithMany()
                 .HasForeignKey(w => w.ownedGameId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<WishedGame>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(w => w.userId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<CategoryForGame>()
                 .HasOne<GameInShop>()
                 .WithMany()
                 .HasForeignKey(g => g.gameId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<CategoryForGame>()
                 .HasOne<Categories>()
                 .WithMany()
                 .HasForeignKey(g => g.categoryId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<LanguageInGame>()
                 .HasOne<Language>()
                 .WithMany()
                 .HasForeignKey(g => g.languageId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<LanguageInGame>()
                 .HasOne<GameInShop>()
                 .WithMany()
                 .HasForeignKey(g => g.gameId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GameInShop>()
                 .HasOne<Developer>()
                 .WithMany()
                 .HasForeignKey(g => g.developerId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<GameInShop>()
                 .HasOne<Publisher>()
                 .WithMany()
                 .HasForeignKey(g => g.publisherId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<DLCInShop>()
                 .HasOne<GameInShop>()
                 .WithMany()
                 .HasForeignKey(g => g.gameId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<DLCInShop>()
                 .HasOne<Publisher>()
                 .WithMany()
                 .HasForeignKey(g => g.publisherId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<DLCInShop>()
                 .HasOne<Developer>()
                 .WithMany()
                 .HasForeignKey(g => g.developerId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<CategoryByAuthor>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(g => g.authorId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<GameBundleCollection>()
+                .HasOne<GameInShop>()
+                .WithMany()
+                .HasForeignKey(d => d.gameId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<GameBundleCollection>()
+                .HasOne<DLCInShop>()
+                .WithMany()
+                .HasForeignKey(d => d.dlcId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<GameBundleCollection>()
+                .HasOne<GameBundle>()
+                .WithMany()
+                .HasForeignKey(d => d.bundleId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Settings>()
+                .HasOne<User>()
+                .WithMany()
+                .HasForeignKey(g => g.attachedUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<WalletTransactions>()
+                .HasOne<User>()
+                .WithMany()
+                .HasForeignKey(g => g.userId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<WalletTransactions>()
+                .HasOne<GameInShop>()
+                .WithMany()
+                .HasForeignKey(g => g.transactionObj)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<WalletTransactions>()
+                .HasOne<DLCInShop>()
+                .WithMany()
+                .HasForeignKey(g => g.transactionObj)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<AchievementByUser>()
+                .HasOne<Achievement>()
+                .WithMany()
+                .HasForeignKey(a => a.achievementId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<AchievementByUser>()
+                .HasOne<User>()
+                .WithMany()
+                .HasForeignKey(u => u.userId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<List<object>>().HasNoKey();
         }

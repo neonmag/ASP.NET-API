@@ -1,14 +1,8 @@
-﻿using FullStackBrist.Server.Models.Categories;
-using FullStackBrist.Server.Models.Creators;
-using FullStackBrist.Server.Models.ShopContent;
+﻿using FullStackBrist.Server.Models.ShopContent;
 using Microsoft.AspNetCore.Mvc;
-using Org.BouncyCastle.Crypto.Operators;
-using Slush.DAO.CreatorsDao;
-using Slush.DAO.GameInShopDao;
-using Slush.Data;
-using Slush.Data.Entity;
+using Slush.Repositories.GameInShopRepository;
 using Slush.Entity.Store.Product;
-using Slush.Entity.Store.Product.Creators;
+using Slush.Services.Minio;
 
 namespace FullStackBrist.Server.Controllers
 {
@@ -16,57 +10,83 @@ namespace FullStackBrist.Server.Controllers
     [Route("api/[controller]")]
     public class DLCInShopController : Controller
     {
-        private readonly DataContext _dataContext;
-        private readonly DLCInShopDao _dLCInShopDao;
+        private readonly DLCInShopRepository _DLCInShopRepository;
+        private readonly MinioService _minioService;
 
-        public DLCInShopController(DataContext dataContext, DLCInShopDao dLCInShopDao)
+        public DLCInShopController(DLCInShopRepository DLCInShopRepository, MinioService minioService)
         {
-            _dataContext = dataContext;
-            _dLCInShopDao = dLCInShopDao;
+            _DLCInShopRepository = DLCInShopRepository;
+            _minioService = minioService;
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<DLCInShopDao>>> GetAllDlcs()
+        public async Task<ActionResult<List<DLCInShopRepository>>> GetAllDlcs()
         {
-            var dlcs = await _dLCInShopDao.GetAll();
+            var dlcs = await _DLCInShopRepository.GetAll();
 
-            var response = dlcs.Select(d => new DLCInShop(id: d.id,
-                                                          gameId: d.gameId,
-                                                          name: d.name,
-                                                          price: d.price,
-                                                          discount: d.discount,
-                                                          previeImage: d.previeImage,
-                                                          dateOfRelease: d.dateOfRelease,
-                                                          developerId: d.developerId,
-                                                          publisherId: d.publisherId,
-                                                          createdAt :d.createdAt)).ToList();
-            return Ok(response);
+            return Ok(dlcs);
         }
 
         [HttpPost]
-        public async Task<ActionResult<DLCInShop>> CreateDLCInShop([FromBody] DLCInShopModel model)
+        public async Task<ActionResult<DLCInShop>> CreateDLCInShop([FromBody] DLCInShopModel model, IFormFile file)
         {
+
             var result = new DLCInShop(Guid.NewGuid(),
                                         model.gameId,
                                         model.name,
                                         model.price,
                                         model.discount,
+                                        model.discountFinish,
                                         model.previeImage,
+                                        model.description,
                                         model.dateOfRelease,
                                         model.developerId,
                                         model.publisherId,
                                         DateTime.Now
                                             );
-            var response = await _dataContext.dbDLCsInShop.AddAsync(result);
 
-            return Ok(response);
+            if (file != null || file.Length != 0)
+            {
+
+                using (var stream = file.OpenReadStream())
+                {
+                    try
+                    {
+                        String imageUrl = await _minioService.SaveFile("images", result.id, file.FileName, stream);
+
+                        var url = await _minioService.GetUrlToFile(imageUrl);
+
+                        result.previeImage = url;
+
+                    }
+                    catch (Exception ex)
+                    {
+                        return StatusCode(500, $"Failed to upload image: {ex.Message}");
+                    }
+                }
+            }
+            await _DLCInShopRepository.Add(result);
+
+            return Ok(result);
         }
 
 
         [HttpGet("{id}")]
         public async Task<ActionResult<DLCInShop>> GetDLCInShop(Guid id)
         {
-            var response = await _dLCInShopDao.GetById(id);
+            var response = await _DLCInShopRepository.GetById(id);
+            if (response == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(response);
+        }
+
+        [HttpGet("bygameid/{id}")]
+        public async Task<ActionResult<List<DLCInShop>>> GetDLCInShopByGameId(Guid id)
+        {
+            var response = await _DLCInShopRepository.GetByGameId(id);
             if (response == null)
             {
                 return NotFound();
@@ -78,16 +98,43 @@ namespace FullStackBrist.Server.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteDLCInShop(Guid id)
         {
-            await _dLCInShopDao.DeleteDLCInShop(id);
+            await _DLCInShopRepository.DeleteDLCInShop(id);
             return NoContent();
         }
 
         [HttpPut("{id}")]
-        public async Task<ActionResult> UpdateDLCInShop(Guid id, [FromBody] DLCInShopModel model)
+        public async Task<ActionResult> UpdateDLCInShop(Guid id, [FromBody] DLCInShopModel model, IFormFile file)
         {
-            var result = new DLCInShop(id, model.gameId, model.name, model.price, model.discount, model.previeImage, model.dateOfRelease, model.developerId, model.publisherId, model.createdAt);
-            await _dLCInShopDao.UpdateDLCInShop(result);
-            return NoContent();
+            if (file != null || file.Length != 0)
+            {
+                using (var stream = file.OpenReadStream())
+                {
+                    try
+                    {
+                        String imageUrl = await _minioService.SaveFile("images", id, file.FileName, stream);
+
+                        var url = await _minioService.GetUrlToFile(imageUrl);
+
+                        var result = await _DLCInShopRepository.UpdateDLCInShop(new DLCInShop(id, model.gameId, model.name, model.price, model.discount, model.discountFinish, url, model.description, model.dateOfRelease, model.developerId, model.publisherId, model.createdAt));
+                        return Ok(result);
+                    }
+                    catch (Exception ex)
+                    {
+                        return StatusCode(500, $"Failed to upload image: {ex.Message}");
+                    }
+                }
+            }
+
+            var res = await _DLCInShopRepository.UpdateDLCInShop(new DLCInShop(id, model.gameId, model.name, model.price, model.discount, model.discountFinish, model.previeImage, model.description, model.dateOfRelease, model.developerId, model.publisherId, model.createdAt));
+            return Ok(res);
+        }
+
+        [HttpPost("getall")]
+        public async Task<ActionResult<List<DLCInShop>>> GetAllDlcByIds([FromBody] List<Guid> guidList)
+        {
+            var response = await _DLCInShopRepository.GetDlcsByIds(guidList);
+
+            return Ok(response);
         }
     }
 }

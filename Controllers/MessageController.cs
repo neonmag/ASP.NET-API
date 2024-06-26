@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Slush.DAO.ChatDao;
-using Slush.Data;
+using Slush.Repositories.ChatRepository;
 using Slush.Entity.Chat;
 using Slush.Models.Chat;
 
@@ -10,43 +9,35 @@ namespace Slush.Controllers
     [Route("api/[controller]")]
     public class MessageController : Controller
     {
-        private readonly DataContext _dataContext;
-        private readonly MessageDao _messageDao;
+        private readonly MessageRepository _messageRepositories;
 
-        public MessageController(DataContext dataContext, MessageDao messageDao)
+        public MessageController(MessageRepository messageRepositories)
         {
-            _dataContext = dataContext;
-            _messageDao = messageDao;
+            _messageRepositories = messageRepositories;
         }
 
         [HttpGet("bychat/{id}")]
-        public async Task<ActionResult<List<MessageDao>>> GetAllMessages([FromBody] Chat chat)
+        public async Task<ActionResult<List<MessageRepository>>> GetAllMessages([FromBody] Chat chat)
         {
-            var messages = await _messageDao.GetAllMessages(chat.id);
+            var messages = await _messageRepositories.GetAllMessages(chat.id);
 
-            var response = messages.Select(m => new Message(id: m.id,
-                chatId: m.chatId,
-                senderId: m.senderId,
-                content: m.content,
-                createdAt: m.createdAt)).ToList();
-
-            return Ok(response);
+            return Ok(messages);
         }
 
         [HttpPost]
         public async Task<ActionResult<Message>> CreateMessage([FromBody] MessageModel model)
         {
-            var result = new Message(Guid.NewGuid(), model.id, model.senderId, model.content, DateTime.Now);
+            var result = new Message(Guid.NewGuid(), model.chatId, model.senderId, model.content, DateTime.Now);
 
-            var response = await _dataContext.dbMessages.AddAsync(result);
+            await _messageRepositories.Add(result);
 
-            return Ok(response);
+            return Ok(result);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<Message>> GetChat(Guid id)
         {
-            var response = await _messageDao.GetById(id);
+            var response = await _messageRepositories.GetById(id);
 
             if (response == null)
             {
@@ -58,7 +49,7 @@ namespace Slush.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteMessage(Guid id)
         {
-            await _messageDao.DeleteMessage(id);
+            await _messageRepositories.DeleteMessage(id);
 
             return NoContent();
         }
@@ -66,11 +57,17 @@ namespace Slush.Controllers
         [HttpPut("{id}")]
         public async Task<ActionResult> UpdateMessage(Guid id, [FromBody] MessageModel model)
         {
-            var result = new Message(id, model.chatId, model.senderId, model.content, DateTime.Now);
+            var result = await _messageRepositories.UpdateMessage(new Message(id, model.chatId, model.senderId, model.content, DateTime.Now));
 
-            await _messageDao.UpdateMessage(result);
+            return Ok(result);
+        }
 
-            return NoContent();
+        [HttpPost("getall")]
+        public async Task<ActionResult<List<Message>>> GetAllMessagesByIds([FromBody] List<Guid> guidList)
+        {
+            var response = await _messageRepositories.GetByIds(guidList);
+
+            return Ok(response);
         }
     }
 }

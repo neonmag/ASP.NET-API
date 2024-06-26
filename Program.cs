@@ -1,27 +1,26 @@
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using MySqlConnector;
-using Slush.DAO.GameInShopDao;
-using Slush.DAO.CategoriesDao;
+using Slush.Repositories.GameInShopRepository;
+using Slush.Repositories.CategoriesRepository;
 using Slush.Data;
-using Slush.DAO.CreatorsDao;
-using Slush.DAO.GameGroupDao;
-using Slush.DAO.GroupDao;
-using Slush.Data.Entity;
-using Slush.DAO.LanguageDao;
-using Slush.Entity.Profile;
-using Slush.DAO.ProfileDao;
-using Slush.DAO.RequirementsDao;
-using Slush.DAO.ChatDao;
-using Slush.DAO;
+using Slush.Repositories.CreatorsRepository;
+using Slush.Repositories.GameGroupRepository;
+using Slush.Repositories.GroupRepository;
+using Slush.Repositories.LanguageRepository;
+using Slush.Repositories.ProfileRepository;
+using Slush.Repositories.RequirementsRepository;
+using Slush.Repositories.ChatRepository;
+using Slush.Repositories;
 using Slush.Services.JWT;
 using Slush.Services.RegistrationValidation;
 using Slush.Services.Hash;
-using Microsoft.Extensions.Options;
+using Minio;
+using Slush.Services.Minio;
+using FullStackBrist.Server.Services.Email;
+using FullStackBrist.Server.Services.Random;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var connectionString = builder.Configuration.GetConnectionString("MsSqlDb") ?? throw new InvalidOperationException("Connection String 'MsSqlDb' not found.");
+var connectionString = builder.Configuration.GetConnectionString("MySqlDb") ?? throw new InvalidOperationException("Connection String 'MySqlDb' not found.");
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
@@ -31,11 +30,24 @@ builder.Services.Configure<JWTOptions>(builder.Configuration.GetSection(nameof(J
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
+builder.Services.AddSingleton<IMinioClient>(sp =>
+{
+    return new MinioClient()
+        .WithEndpoint("172.16.10.22:9000")
+        .WithCredentials("hIuEqWhGLHJ8h8Jj7USf", "oNqDliRpIMNQYvSMEaNhuXgx8ux3nX2uEb05QEhT")
+        .WithSSL(false)
+        .Build();
+});
+
+
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddScoped<RegistrationService>();
 builder.Services.AddScoped<HashPasswordService>();
+builder.Services.AddScoped<RandomService>();
+builder.Services.AddScoped<MinioService>();
 builder.Services.AddScoped<JWTService>();
+builder.Services.AddScoped<EmailService>();
 
 builder.Services.AddSwaggerGen(c =>
 {
@@ -48,51 +60,64 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddRazorPages();
 
-builder.Services.AddTransient<CategoriesDAO>();
-builder.Services.AddTransient<CategoriesByAuthorDao>();
-builder.Services.AddTransient<CategoriesByUserDao>();
-builder.Services.AddTransient<CategoryForGameDao>();
+#region Repositories
 
-builder.Services.AddTransient<DeveloperDao>();
-builder.Services.AddTransient<PublisherDao>();
+builder.Services.AddTransient<CategoriesRepository>();
+builder.Services.AddTransient<CategoriesByAuthorRepository>();
+builder.Services.AddTransient<CategoriesByUserRepository>();
+builder.Services.AddTransient<CategoryForGameRepository>();
 
-builder.Services.AddTransient<GameCommentDao>();
-builder.Services.AddTransient<GameGroupDao>();
-builder.Services.AddTransient<GameGuideDao>();
-builder.Services.AddTransient<GameNewsDao>();
-builder.Services.AddTransient<GamePostsDao>();
-builder.Services.AddTransient<GameTopicDao>();
+builder.Services.AddTransient<DeveloperRepository>();
+builder.Services.AddTransient<PublisherRepository>();
 
-builder.Services.AddTransient<DLCInShopDao>();
-builder.Services.AddTransient<GameInShopDao>();
+builder.Services.AddTransient<GameCommentRepository>();
+builder.Services.AddTransient<GameGroupRepository>();
+builder.Services.AddTransient<GameGuideRepository>();
+builder.Services.AddTransient<GameNewsRepository>();
+builder.Services.AddTransient<GamePostsRepository>();
+builder.Services.AddTransient<GameTopicRepository>();
 
-builder.Services.AddTransient<GroupCommentDao>();
-builder.Services.AddTransient<GroupDao>();
-builder.Services.AddTransient<PostDao>();
-builder.Services.AddTransient<TopicDao>();
+builder.Services.AddTransient<DLCInShopRepository>();
+builder.Services.AddTransient<GameInShopRepository>();
 
-builder.Services.AddTransient<LanguageDao>();
-builder.Services.AddTransient<LanguageInGameDao>();
+builder.Services.AddTransient<GroupCommentRepository>();
+builder.Services.AddTransient<GroupRepository>();
+builder.Services.AddTransient<PostRepository>();
+builder.Services.AddTransient<TopicRepository>();
 
-builder.Services.AddTransient<FriendsDao>();
-builder.Services.AddTransient<OwnedGameDao>();
-builder.Services.AddTransient<ScreenshotDao>();
-builder.Services.AddTransient<UserCommentDao>();
-builder.Services.AddTransient<UserDao>();
-builder.Services.AddTransient<VideoDao>();
-builder.Services.AddTransient<WishedGameDao>();
+builder.Services.AddTransient<LanguageRepository>();
+builder.Services.AddTransient<LanguageInGameRepository>();
 
-builder.Services.AddTransient<MaximumSystemRequirementDao>();
-builder.Services.AddTransient<MinimalSystemRequirementDao>();
+builder.Services.AddTransient<FriendsRepository>();
+builder.Services.AddTransient<OwnedGameRepository>();
+builder.Services.AddTransient<OwnedDlcRepository>();
+builder.Services.AddTransient<ScreenshotRepository>();
+builder.Services.AddTransient<UserCommentRepository>();
+builder.Services.AddTransient<UserRepository>();
+builder.Services.AddTransient<VideoRepository>();
+builder.Services.AddTransient<WishedGameRepository>();
 
-builder.Services.AddTransient<MessageDao>();
-builder.Services.AddTransient<ChatDao>();
+builder.Services.AddTransient<MaximumSystemRequirementRepository>();
+builder.Services.AddTransient<MinimalSystemRequirementRepository>();
 
-builder.Services.AddTransient<DiscussionDao>();
+builder.Services.AddTransient<MessageRepository>();
+builder.Services.AddTransient<ChatRepository>();
 
-builder.Services.AddTransient<CategoryByUserForGameDao>();
-builder.Services.AddTransient<UserCategoryDao>();
+builder.Services.AddTransient<DiscussionRepository>();
 
+builder.Services.AddTransient<CategoryByUserForGameRepository>();
+builder.Services.AddTransient<UserCategoryRepository>();
+
+builder.Services.AddTransient<SettingsRepository>();
+builder.Services.AddTransient<WalletTransactionsRepository>();
+
+builder.Services.AddTransient<AchievementByUserRepository>();
+builder.Services.AddTransient<AchievementRepository>();
+
+builder.Services.AddTransient<GameBundleCollectionRepository>();
+builder.Services.AddTransient<GameBundleRepository>();
+
+#endregion
 
 builder.Services.AddCors(options =>
 {
@@ -116,7 +141,6 @@ app.UseCookiePolicy(new CookiePolicyOptions
 });
 
 app.UseDefaultFiles();
-app.UseStaticFiles();
 
 if (app.Environment.IsDevelopment())
 {
